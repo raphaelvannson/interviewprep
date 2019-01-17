@@ -1,0 +1,1036 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+#install.packages("dplyr")
+```
+
+
+```{r}
+library(dplyr)
+```
+
+
+
+```{r}
+set.seed(1234)
+
+# dates
+dates = seq(1, 365) %>%
+  lapply(function(x) {if (x %% 6 != 0) x}) %>%
+  unlist() %>%
+  lapply(function(x) {if (x %% 7 != 0) x}) %>%
+  unlist() %>%
+  lapply(function(x) {if (x <= 180 | x >= 240) x}) %>%
+  unlist() %>%
+  as.Date("1/1/2017", format = "%m/%d/%Y")
+#dates
+
+
+# student IDs
+student_ids = seq(1, 90)
+#student_ids
+
+# attendence df
+attendance_events_df = merge(dates, student_ids, by = NULL) %>%
+  rename(date = x, student_id = y) %>%
+  arrange(date, student_id) %>%
+  mutate(attendence = rnorm(n = length(dates) * length(student_ids))) %>%
+  #mutate(attendence = ifelse(attendence > 1, FALSE, TRUE))
+  mutate(attendence = case_when(attendence > 1 ~ FALSE, attendence <= 1 ~ TRUE))
+
+attendance_events_df
+```
+
+
+```{r}
+attendance_events_df %>%
+  filter(attendence == TRUE) %>%
+  nrow() / nrow(attendance_events_df)
+```
+
+
+
+
+
+```{r}
+dobs = as.Date(as.integer(rnorm(length(student_ids), 0, 200)), "1/1/2010", format = "%m/%d/%Y")
+dobs
+
+all_students_df = data.frame(student_id = student_ids,
+                             school_id = rep("school1", length(student_ids)),
+                             grade_level = as.integer(c(rep(1, 30), rep(2, 30), rep(3, 30))),
+                             date_of_birth = dobs,
+                             hometown = rep("town1", 90))
+
+all_students_df %>%
+  mutate(school_id = as.character(school_id)) %>%
+  mutate(hometown = as.character(hometown))
+
+```
+
+
+
+# % of students attending school on their bday
+
+## bday as day of year
+
+```{r}
+all_students_df2 = all_students_df %>%
+  mutate(bday_doy = as.integer(strftime(date_of_birth, format = "%j")))
+
+all_students_df2
+```
+
+
+```{r}
+n_students_attend_bd = attendance_events_df %>%
+  filter(attendence == TRUE) %>%
+  mutate(doy = as.integer(strftime(date, format = "%j"))) %>%
+  left_join(y = all_students_df2, by = "student_id") %>%
+  filter(doy == bday_doy) %>%
+  distinct(student_id) %>%
+  nrow() 
+n_students_attend_bd
+
+
+percentage = n_students_attend_bd / nrow(all_students_df) * 100
+percentage
+
+  
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+n_students_per_grade_df = all_students_df %>%
+  group_by(grade_level) %>%
+  summarize(n_students = n())
+n_students_per_grade_df
+
+
+attendance_events_df %>%
+  filter(date >= as.Date("2017-12-30", format = "%Y-%m-%d")) %>%
+  left_join(y = all_students_df, by = "student_id") %>%
+  group_by(grade_level, date) %>%
+  summarize(n_attended = sum(attendence)) %>%
+  left_join(y = n_students_per_grade_df, by = "grade_level") %>%
+  mutate(attendence_rate = n_attended/n_students) %>%
+  arrange(grade_level, date) %>%
+  mutate(attendence_rate_diff = attendence_rate - lag(attendence_rate)) %>%
+  arrange(attendence_rate_diff) %>% 
+  .$grade_level %>%
+  first()
+```
+
+
+
+```{r}
+#install.packages("reshape2")
+#library(reshape2)
+
+# example data frame
+x = data.frame(
+  id   = c(1, 2, 3, 4),
+  blue = c(1, 0, 1, 0),
+  red  = c(0, 1, 0, 1)
+)
+
+
+x
+
+# collapse the data frame
+molten = melt(data = x, measure.vars = c("blue", "red"))
+molten
+
+
+molten %>% dcast(formula = id ~ variable, value.var = "value")
+```
+
+
+```{r}
+df <- data.frame(id = rep(1:4, rep(2,4)),
+                 visit = I(rep(c("Before","After"), 4)),
+                 x = rnorm(4), y = runif(4))
+df
+reshape(df, timevar = "visit", idvar = "id", direction = "wide")
+```
+
+
+```{r}
+df1 = data.frame(a = c(2, 2, 3, 1), b = c(22, 21, 3, 1))
+df1
+
+df2 = data.frame(a = c(1, 2, 2, 4), c = c(1, 21, 22, 4))
+df2
+```
+
+
+
+```{r}
+df1 %>% 
+  .$a %>%
+  sum()
+
+df1 %>% group_by(a) %>%
+  arrange(a, b)#, .by_group = TRUE)
+```
+
+
+
+```{r}
+lag(1:10, 1)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+install.packages("babynames")
+library(babynames)
+```
+
+```{r}
+babynames
+```
+
+
+
+```{r}
+babynames %>% 
+  group_by(year, sex) %>%
+  arrange(desc(n)) %>%
+  mutate(rank = row_number()) %>%
+  arrange(year, rank, sex)
+  
+  
+  
+  
+  # arrange(year, sex, desc(rank)) %>%
+  # mutate(cumsum = cumsum(n)) %>%
+  # mutate(maxcumsum = max(cumsum))
+
+
+
+
+```
+
+
+```{r}
+install.packages("nycflights13")
+library(nycflights13)
+```
+
+```{r}
+airlines
+flights
+```
+
+
+
+```{r}
+airports
+flights
+```
+
+
+```{r}
+airports %>%
+  semi_join(flights, by = c("faa" = "dest")) %>%
+  distinct() %>%
+  count()
+```
+
+```{r}
+install.packages("tidyr")
+library(tidyr)
+```
+
+
+```{r}
+?gather
+#spread
+```
+
+
+```{r}
+stocks <- tibble(
+  time = as.Date('2009-01-01') + 0:9,
+  marketplace = c(rep("NYSE", 5), rep("CAC40", 5)),
+  X = c(NA, rnorm(9, 0, 1)),
+  Y = rnorm(10, 0, 2),
+  Z = c(rnorm(9, 0, 4), NA)
+)
+
+stocks
+```
+
+
+
+
+```{r}
+gathered_df = stocks %>%
+  gather(key = "stock name",
+         value = price,
+         X, Y, Z)
+
+gathered_df
+```
+
+
+```{r}
+gathered_df %>%
+  spread(key = "stock name", value = price) %>%
+  mutate(X = ifelse(is.na(X), 0, 1))
+```
+
+
+
+
+
+
+```{r}
+plots_df = read.csv(file = "/Users/raphaelvannson/repos/portal-teachingdb/plots.csv", header = TRUE, sep = ",")
+plots_df
+```
+
+
+```{r}
+species_df = read.csv(file = "/Users/raphaelvannson/repos/portal-teachingdb/species.csv", header = TRUE, sep = ",")
+species_df
+```
+
+
+```{r}
+surveys_df = read.csv(file = "/Users/raphaelvannson/repos/portal-teachingdb/surveys.csv", header = TRUE, sep = ",")
+surveys_df
+```
+
+
+
+
+```{r}
+counts_df <- data.frame(
+  day = c("Monday", "Tuesday", "Wednesday"),
+  wolf = c(2, 1, 3),
+  hare = c(20, 25, 30),
+  fox = c(4, 4, 4)
+)
+counts_df
+```
+
+
+```{r}
+counts_df %>% 
+  gather(key = "species", value = "count", -day) %>%
+  .[1:8,] %>%
+  spread(key = "species", value = "count", fill = 0)
+```
+
+
+
+```{r}
+surveys_df %>%
+  filter(year == 1990) %>%
+  group_by(species_id) %>%
+  summarize(count = n()) %>%
+  mutate(prop = count / sum(count)) %>%
+  inner_join(y = species_df, by = "species_id") %>%
+  group_by(taxa) %>%
+  mutate(species_prop_within_taxa = count / sum(count)) %>%
+  arrange(taxa, species_prop_within_taxa)
+  
+  
+  
+  
+  # group_by(genus) %>%
+  # mutate(max_prop_in_genus = max(prop)) %>%
+  # filter(prop == max_prop_in_genus)
+
+
+
+
+```
+
+```{r}
+mean(c(1, 2, 3, NA), na.rm = TRUE)
+```
+
+
+
+
+```{r}
+#surveys_df %>%
+stocks %>%
+  gather(key = "stk_name", value = "stk_val", X, Y, Z, na.rm = TRUE) %>%
+  group_by(stk_name) %>%
+  summarize(max = max(stk_val))
+
+
+stocks %>%
+  gather(key = "stk_name", value = "stk_val", X, Y, Z, na.rm = TRUE) %>%
+  group_by(stk_name) %>%
+  top_n(2, stk_val)
+
+
+# stocks %>%
+#   gather(key = "stk_name", value = "stk_val", X, Y, Z, na.rm = TRUE) %>%
+#   group_by(stk_name) %>%
+#   arrange(desc(stk_val)) %>%
+#   slice(1)
+
+
+#summarize(max = max(stk_val))
+
+# df1 %>%  
+#   mutate(new = cumprod(a))
+```
+
+
+```{r}
+stocks %>%
+  gather(key = "stk_name", value = "stk_val", X, Y, Z, na.rm = TRUE) %>%
+  group_by(stk_name, marketplace) %>%
+  summarize(count = n())
+```
+
+
+```{r}
+stocks %>%
+  gather(key = "stk_name", value = "stk_val", X, Y, Z, na.rm = TRUE) %>%
+  group_by(stk_name) %>%
+  arrange(stk_name, stk_val)
+```
+
+
+```{r}
+data.frame(a = c(1, 1, 1, 1, 2, 2, 2), b = c(11, 11, 10, 12, 21, 22, 23)) %>%
+  group_by(a) %>%
+  mutate(c = dense_rank(b))
+  #mutate(pmax(a, b))
+  #complete(a, b)
+```
+
+
+```{r}
+df1 %>% complete(a = 0:5) %>%
+  filter(a != 0) %>%
+  mutate(c = cumsum(a), cumany(a >= 4), cumall(a))
+```
+
+
+
+
+```{r}
+df <- read.table(header = TRUE, text = "
+id  year    name    job    job2
+1   1990    Bon     Manager 0
+1   1991    Bon     Manager 0
+1   1992    Bon     Manager 0
+1   1993    Bon     Boss    1
+1   1994    Bon     Boss    1
+1   1995    Bon     Manager 0
+2   1990    Jane    Manager 0
+2   1991    Jane    Boss    1
+2   1992    Jane    Manager 0
+2   1993    Jane    Boss    1
+", stringsAsFactors = FALSE)
+
+df
+```
+
+```{r}
+df %>%
+  arrange(id, year) %>%
+  group_by(id) %>%
+  mutate(boss_so_far = cumany(job == "Boss")) %>%
+  mutate(keep = case_when(boss_so_far == FALSE ~ TRUE,
+                          (lag(boss_so_far) == FALSE & boss_so_far == TRUE) ~ TRUE,
+                          TRUE ~ FALSE)
+         ) %>%
+  filter(keep == TRUE)
+```
+
+```{r}
+df %>% 
+  group_by(id) %>%
+  mutate(out_of_boss = cumany((lag(job, default = "?") == "Boss") & (job != "Boss")))
+```
+
+
+
+```{r}
+df %>% 
+  arrange(id, year) %>%
+  group_by(id) %>%
+  mutate(test = cumany(lag(job, default = "not_boss") == "Boss"))# %>%
+  #mutate(test = cumany(lag(job, default = "not_boss") == "Boss"))# %>%
+  #filter(test == FALSE)
+```
+
+
+
+```{r}
+df %>%
+  arrange(id, year) %>%
+  group_by(id) %>%
+  mutate(boss_so_far = cumsum(job2)) #%>%
+  #filter(boss_so_far <= 1)
+```
+
+
+
+
+
+
+
+```{r}
+install.packages("ggplot2")
+library(ggplot2)
+```
+
+
+
+```{r}
+df_dates = c(0:15, 30) %>%
+  lapply(function(x) { if (x %% 2 == 0) x}) %>%
+  unlist() %>%
+  as.Date("1/1/2017", format = "%m/%d/%Y")
+  
+df_dates
+
+
+df = data.frame(dates = df_dates, val = 1:length(df_dates))
+df
+
+
+all_dates = 0:30 %>%
+  as.Date("1/1/2017", format = "%m/%d/%Y")
+all_dates
+
+df %>%
+  complete(dates = all_dates) %>%
+  mutate(val = ifelse(is.na(val), 0, val)) %>%
+  ggplot(aes(x = dates, y = val)) + 
+  geom_line() +
+  geom_point()
+  
+  
+```
+
+
+
+
+
+
+
+```{r}
+df = read.csv(file = "gadata_example_2.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE)
+df
+```
+
+
+```{r}
+df = df %>%
+  mutate(date = as.Date(date))
+df
+
+mm = df %>%
+  summarise(min = min(date), max = max(date))
+
+min_date = mm$min
+max_date = mm$max
+
+min_date
+max_date
+
+all_dates = as.Date(min_date:max_date, origin = "1970-1-1")
+min(all_dates)
+max(all_dates)
+
+
+df = df %>% 
+  complete(date = all_dates)
+
+df
+```
+
+
+```{r}
+df %>%
+  group_by(deviceCategory) %>%
+  summarize(bounce_rate = sum(bounces) / sum(sessions))
+```
+
+
+
+```{r}
+df %>%
+  complete(date, channelGrouping) %>%
+  select(date, channelGrouping, pageviews) %>%
+  mutate(pageviews = ifelse(is.na(pageviews), 0, pageviews)) %>%
+  group_by(date, channelGrouping) %>%
+  summarize(avg_pv = mean(pageviews)) %>%
+  ungroup() %>%
+  #mutate(date = as.Date(date)) %>%
+  ggplot() +
+  geom_line(aes(x = date, y = avg_pv, color = channelGrouping))
+```
+
+
+
+```{r}
+df = data.frame(id = 1:3,
+                name = c("foo", "bar", "baz"),
+                boss_id = c(3, 1, 2))
+df
+```
+
+```{r}
+df %>%
+  left_join((df %>% select(id, name)),
+            by = c("boss_id" = "id"),
+            suffix = c("_emp", "_boss"))
+```
+
+
+```{r}
+df %>%
+  inner_join(df, by = c("a", "b"))
+```
+
+
+
+
+```{r}
+install.packages("RcppRoll")
+library(RcppRoll)
+```
+
+
+```{r}
+set.seed(1234)
+
+data.frame(time = 1:100, val = rnorm(100, 0, 1)) %>%
+  mutate(rolling_avg = RcppRoll::roll_mean(x = val, n = 7, fill = c(0))) %>%
+  gather(key = series_name, value = y_val, -time) %>%
+  ggplot(aes(x = time, y = y_val, color = series_name)) +
+  geom_line() +
+  geom_point()
+  # geom_line(aes(x = time, y = rolling_avg))
+  # ggplot() +
+  # geom_line(aes(x = date, y = avg_pv, color = channelGrouping))
+
+
+```
+
+
+```{r}
+108 + 2.06 * 15/ sqrt(26)
+```
+
+
+```{r}
+n_chips_per_wafer = 1000
+n_wafers_per_lot = 25
+n_lots = 100
+
+n_chips = n_chips_per_wafer * n_wafers_per_lot * n_lots
+
+n_chips
+
+
+```
+
+
+
+```{r}
+n_wafer_before = 15
+n_wafer_after = 15
+
+n_treatments_per_wafer = 500
+length_treatments = 300
+
+n_manuf_rows = (n_wafer_before + n_wafer_after) * n_treatments_per_wafer * length_treatments
+
+n_manuf_rows * 250 / 500
+
+
+```
+
+
+
+```{r}
+library(equivalence)
+```
+
+
+```{r}
+0.027*0.6*0.6
+```
+
+
+
+```{r}
+?rnorm
+```
+
+```{r}
+pnorm(60000, mean = 57000, sd = 1200)
+```
+
+
+```{r}
+mu = 57000
+sigma = 1200
+n = 50
+# mu = 0
+# sigma = 1
+
+
+x = mu + 4 * sigma * (-100:100)/100
+plot(x, pnorm(x, mu, sigma))
+```
+
+
+```{r}
+qnorm(1-0.025) * sigma /sqrt(n) + mu
+
+qnorm(1-0.025, mu, sigma)# * sigma - mu
+```
+
+
+```{r}
+#1 - pt(q = (57000 - 60000) / (1200/sqrt(50)), df = n-1)
+
+pnorm((57000 - 60000) / (1200/sqrt(50)) )
+(59500 - 60000) / (1200/sqrt(50))
+```
+
+```{r}
+pt(-2, df = 24)
+```
+
+
+```{r}
+4 * 0.2 * 0.8^3 + 6 * 0.2^2 * 0.8^2 + 4 * 0.2^3 * 0.8 + 0.2^4
+```
+
+
+
+```{r}
+(0.999*0.5^11 + 0.001) / (0.999*0.5^10 + 0.001)
+```
+
+
+```{r}
+median(c(1, 1.4, 1.8))
+
+
+0.75 * 0.75 * 0.25
+
+```
+
+```{r}
+1 - (1 - 0.2)^(4-0)
+```
+
+
+
+
+```{r}
+(sqrt(0.6*0.4)*qnorm(0.02) / (-0.05))^2
+
+
+(sqrt(0.6*0.4)*qt(0.02, 99) / (-0.05))^2
+```
+
+```{r}
+1 - pnorm(q = 51/235, mean = 1/6, sd = sqrt(5/36/235))
+
+1 - pt(q = (51/235 - 1/6)/sqrt(5/36/235),  df = 234)
+```
+
+
+```{r}
+1 - pbinom(118, 200, 0.5)
+1 - pnorm(q = 118/200, mean = 0.5, sd = 1/(2 * sqrt(200)))
+1 - pnorm(q = 2*sqrt(200)*(118/200 - 1/2))
+```
+
+```{r}
+1 - pnorm(q = 0.02, mean = 0, sd = sqrt( 97/180*(1- 97/180) *180/(100*80)) )
+```
+
+
+```{r}
+44*1.25
+```
+
+
+
+
+```{r}
+# control
+nc = 100
+xc = 53
+pc = xc / nc
+cat("control success proportion:\n")
+pc
+
+# treatment
+nt = 80
+xt = 44
+
+nt = 100
+xt = 54
+
+pt = xt / nt
+cat("treatment success proportion:\n")
+pt
+
+# pooled (ok when Ho is true: pt = pc)
+p_pooled = (xc + xt) / (nc + nt)
+cat("Pooled success proportion:\n")
+p_pooled
+
+
+cat("Observed diff in proportions (pt - pc):\n")
+obs_p_diff = pt - pc
+obs_p_diff
+
+cat("p val for Ho: treatment has no effect, H1: treatment has desired effect (pt > pc)\n")
+1 - pnorm(q = obs_p_diff, mean = 0, sd = sqrt(p_pooled * (1-p_pooled)*(nt+nc)/(nt*nc)))
+
+
+```
+
+
+
+```{r}
+n = 1500
+p = 0.485
+binom.test(x = as.integer(n*p), n = n, p = 0.5, alternative = "less", conf.level = 0.95)
+```
+
+
+
+
+
+```{r}
+1/1000 / (1/1000 + 999/1000 * 0.05)
+```
+
+
+```{r}
+ 0.2^2
+```
+
+
+```{r}
+1/choose(24,5)^2 + 400/choose(24,5)^2
+(1/2)^10*( choose(10,8) + choose(10,9) + choose(10,10))
+```
+
+```{r}
+df = data.frame(name = c("a", "a", "a", "a", "a", "b", "b", "b", "b", "b"),
+                val = c(100, 90, 90, -40, 85,
+                        0, 0, 60,-30, -50))
+df
+```
+
+
+```{r}
+df %>%
+  group_by(name) %>%
+  arrange(name, val) %>%
+  mutate(rank = dense_rank(val))
+  
+```
+
+
+```{r}
+data.frame(name = c("a", "a", "a", "a", "a", "b", "b", "b", "b", "b"),
+                val = c(TRUE, TRUE, FALSE, TRUE, FALSE,
+                        FALSE, TRUE, FALSE,TRUE, TRUE)) %>%
+  group_by(name) %>%
+  mutate(cum_logic = cumany(val))
+```
+
+
+
+
+```{r}
+n_std = 1
+
+averages_df = df %>%
+  group_by(name) %>%
+  summarize(avg = mean(val), std = sqrt(var(val)), n = n()) %>%
+  mutate(lb = avg - n_std * std) %>%
+  mutate(ub = avg + n_std * std) 
+
+averages_df
+```
+
+
+
+```{r}
+df %>%
+  left_join(y = averages_df, by = "name") %>%
+  filter(lb < val & val < ub) %>%
+  group_by(name) %>%
+  summarize(avg = mean(val))
+```
+
+```{r}
+df
+```
+
+
+
+
+
+```{r}
+library(tidyr)
+?gather
+```
+
+
+
+```{r}
+stocks <- tibble(
+  time = as.Date('2009-01-01') + 0:9,
+  X = rnorm(10, 0, 1),
+  Y = rnorm(10, 0, 2),
+  Z = rnorm(10, 0, 4)
+)
+
+stocks
+```
+
+
+```{r}
+stocks %>%
+  gather(key = "stock_name", value = "stock_price", -time) %>%
+  spread(key = "stock_name", value = "stock_price") %>%
+  unite(col = "XY", sep = " ", X, Y) %>%
+  separate(into = c("X", "Y"), sep = " ", convert = TRUE, XY)
+```
+
+
+
+
+
+```{r}
+library(nycflights13)
+```
+
+
+```{r}
+flights
+```
+
+
+
+```{r}
+library(ggplot2)
+```
+
+
+```{r}
+flights %>%
+  mutate(time = hour + minute / 60) %>%
+  group_by(time) %>%
+  summarize(arr_delay = mean(arr_delay, na.rm = TRUE), n = n()) %>%
+  ggplot() +
+  geom_point(aes(x = time, y = arr_delay, size = n, alpha = 0.01))
+
+```
+
+
+```{r}
+airports
+```
+
+
+```{r}
+library(maps)
+```
+
+
+```{r}
+flights %>%
+  mutate(time = hour + minute / 60) %>%
+  group_by(dest) %>%
+  summarize(arr_delay = mean(arr_delay, na.rm = TRUE), n = n()) %>%
+  left_join(y = (airports %>% select(faa, lon, lat)), by = c("dest" = "faa")) %>%
+  filter(-140 < lon) %>%
+  ggplot() +
+  geom_point(aes(x = lon, y = lat, size = n, alpha = 0.05)) + 
+  borders(database = "state", size = 0.5)
+```
+
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+df = data.frame("a" = c(1, 2), "b" = c(11, 12))
+df
+```
+
+
+
+
+```{r}
+?cumall
+```
+
+
+
+```{r}
+flights
+```
+
+
+
+
+
+```{r}
+set.seed(1234)
+
+
+flights %>%
+  select(carrier, air_time) %>%
+  filter(!is.na(air_time)) %>%
+  sample_n(1000) %>%
+  group_by(carrier) %>%
+  arrange(carrier, air_time) %>%
+  mutate(percentile = cume_dist(air_time))
+    
+```
+
