@@ -1,0 +1,1039 @@
+ /Library/PostgreSQL/10/bin/psql --username=postgres
+
+ OR SQL shell (psql) in spotlight
+
+ OR pgAdmin 4 in spotlight
+
+\l = list databases
+\connect <dbname> = use <dbname>
+
+start / stop postgres server: pg_ctl
+
+
+
+
+
+
+
+
+
+
+user_id, country, timestamp, location, rating (optional)
+
+
+-- top 5 checkin locations per country
+
+select B.country, B.location, B.rating, B.therank
+	(select A.country, A.location, A.rating
+		rank() over (partition by A.country order by A.rating desc) as therank
+	from
+		--A
+		(select country, location, rating
+		from table
+		where rating is not null) A
+		--A
+	) B	
+where B.therank <= 5
+
+
+
+
+
+
+-- top 5 locations in check in proportion per country
+
+select country, location, prop, location_rank
+from
+	(select D.country, D.location, D.prop,
+		rank() over (partition by D.country order by D.prop desc) as location_rank
+		from
+			(select country, location, n_checkins_per_loc /  n_checkins_per_country as prop
+			from
+				(
+				(select country, location, count(*) as n_checkins_per_loc from table group by country, location) A 
+				inner join
+				(select country, count(*) as n_checkins_per_country from table group by country) B
+				on A.country = B.country
+				) C
+			) D
+		) E
+where location_rank <= 5;
+
+
+
+
+
+
+
+
+
+
+
+https://pgexercises.com/questions/joins/threejoin2.html
+
+select * from
+(select member, facility, 
+		(case when memid = 0 then guestcost * slots
+		else membercost * slots end) as cost
+from		
+(select C.memid, C.slots, C.name as facility, C.membercost, C.guestcost,
+		D.firstname || ' ' || D.surname as member
+	from		
+		(select A.memid, A.slots, B.name, B.membercost, B.guestcost
+		from
+			(select facid, memid, slots
+			from cd.bookings
+			where starttime > date('2012-09-14') and starttime < date('2012-09-15')) A
+			inner join
+			(select facid, name, membercost, guestcost from cd.facilities) B
+			on A.facid = B.facid
+	) C
+		inner join
+		(select memid, firstname, surname from cd.members) D
+		on C.memid = D.memid
+) E ) F
+where cost > 30
+order by cost desc
+
+
+
+
+select
+	C.firstname || ' ' || C.surname as member,
+	B.name as facility,
+	case
+		when C.memid = 0 then B.guestcost * A.slots
+		else B.membercost * A.slots
+	end as cost
+from
+	cd.bookings A
+	inner join
+	cd.facilities B
+	on A.facid = B.facid
+	inner join cd.members C
+	on A.memid = C.memid
+	
+	where A.starttime > date('2012-09-14')
+	and A.starttime < date('2012-09-15')
+	and (C.memid = 0 and B.guestcost * A.slots > 30 or C.memid <> 0 and B.membercost * A.slots > 30)
+
+order by cost desc
+
+
+
+
+
+select member, facilty, cost
+from
+	(select
+		mem.firstname || ' ' || mem.surname as member,
+		fac.name as facilty,
+		case
+			when bks.memid = 0 then bks.slots * fac.guestcost
+			else bks.slots * fac.membercost
+		end as cost
+	from
+		cd.bookings bks
+		inner join
+		cd.facilities fac
+		on bks.facid = fac.facid
+		inner join
+		cd.members mem
+		on bks.memid = mem.memid
+		where bks.starttime > date('2012-09-14') and bks.starttime < date('2012-09-15')
+	 ) data
+where cost > 30
+order by cost desc
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+select
+	date,
+	(select
+		sum(case
+			when A.memid = 0 then A.slots * B.guestcost
+			else A.slots * B.membercost
+		end) / 15 as avg_revenue
+	from 
+		cd.bookings A
+		inner join
+		cd.facilities B
+		on A.facid = B.facid
+	where cast(A.starttime as date) > dates.date - 15
+	and cast(A.starttime as date) <= dates.date
+	)
+from
+	(select
+		cast(generate_series(timestamp '2012-08-01',
+							 '2012-08-31',
+							 '1 day') as date) as date
+	) as dates
+order by date asc
+*/
+
+
+select
+	date,
+	revenue
+from
+	(select
+		dates.date,
+		avg(date_revenues.date_revenue) over(order by dates.date asc rows 14 preceding) as revenue
+	from
+		(select cast(generate_series(timestamp '2012-07-01',
+									 '2012-08-31',
+									 '1 day') as date) as date) as dates
+		left join							 
+		(select
+			cast(A.starttime as date) date,
+			sum(case
+				when A.memid = 0 then A.slots * B.guestcost
+				else A.slots * B.membercost
+			end) as date_revenue
+		from 
+			cd.bookings A
+			inner join
+			cd.facilities B
+			on A.facid = B.facid
+		group by cast(A.starttime as date)
+		) as date_revenues
+		on dates.date = date_revenues.date) C
+where date >= date('2012-08-01')
+and date <= date('2012-08-31')
+order by date
+		
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+select
+	name,
+	case 
+		when fac_rank < n_fac / 3 then 'high'
+		when fac_rank > n_fac * 2 / 3 then 'low'
+		else 'average'
+	end as revenue
+from	
+	(select
+		name,
+		fac_revenue,
+		rank() over (order by fac_revenue desc) as fac_rank,
+		(select count(distinct facid) from cd.facilities) as n_fac
+	from	
+		(select name, sum(booking_revenue) as fac_revenue
+		from
+			(select
+				name,
+				case when memid = 0 then guestcost * slots
+					else membercost * slots
+				end as booking_revenue
+			from
+				cd.bookings A
+				inner join
+				cd.facilities B
+				on A.facid = B.facid) C
+		group by name) D
+	 ) E
+	
+
+
+
+
+
+select
+	name,
+	case
+		when class=1 then 'high'
+		when class=2 then 'average'
+		else 'low'
+	end revenue
+from (
+	select
+		name,
+		ntile(3) over (order by sum(case
+										when memid = 0 then slots * guestcost
+										else slots * membercost
+										end)
+										desc) as class
+	from
+		cd.bookings bks
+		inner join
+		cd.facilities facs
+		on bks.facid = facs.facid
+	group by name) as subq
+order by class, name; 
+
+
+
+
+
+
+select
+	name,
+	case
+		when fac_ntile = 1 then 'high'
+		when fac_ntile = 2 then 'average'
+		else 'low'
+	end as revenue
+from	
+	(select
+		name,
+		ntile(3) over (order by fac_revenue desc) as fac_ntile
+	from	
+		(select
+			name,
+			sum(booking_revenue) as fac_revenue
+  		from  
+			(select
+				name,
+				case
+					when memid = 0 then guestcost * slots
+					else membercost * slots
+				end as booking_revenue
+			from
+					cd.bookings A
+					inner join
+					cd.facilities B
+					on A.facid = B.facid) C
+		group by name) D
+	order by fac_ntile, name) E
+
+
+
+
+
+
+
+
+
+select
+	name,
+	case
+		when fac_ntile = 1 then 'high'
+		when fac_ntile = 2 then 'average'
+		else 'low'
+	end as revenue
+from	
+			(select
+				name,
+				ntile(3) over(
+							order by sum(
+								case
+									when memid = 0 then guestcost * slots
+									else membercost * slots
+									end)
+							desc) as fac_ntile 
+			from
+					cd.bookings A
+					inner join
+					cd.facilities B
+					on A.facid = B.facid
+		group by name) subq
+order by fac_ntile, name 	
+
+
+
+
+
+
+
+
+user_id, country, timestamp, location, rating (optional)
+
+
+
+
+
+select
+	country,
+	location,
+	rank() over (country order by loc_prop_per_country desc) as loc_rank_in_country
+from
+	(select
+		country,
+		location,
+		n_checkins_per_loc / n_checkins_per_country as loc_prop_per_country
+	from	
+		(select country, location, count(*) as n_checkins_per_loc
+		from table
+		group by country, location) A
+		inner join
+		(select country, count(*) as n_checkins_per_country
+		from table
+		group by country) B
+		on A.country = B.country) sub
+where loc_rank_in_country <= 5
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+select
+	orderID,
+	randunif()
+from 
+	orders
+where randunif() <= 0.02
+
+
+
+
+
+
+
+
+(select
+	employeeID,
+	Lastname,
+	count(*)
+from 
+	orders O
+	inner join
+	employees E
+	on O.employeeID = E.employeeID
+	where shippeddate >= requiredDate
+group by employeeID, lastname
+order by count(*) desc)
+
+
+
+
+
+select
+	O.employeeID,
+	lastname,
+	count(*) filter(where shippeddate >= requiredDate) as lateOrderCount,
+	count(*) as employeeOrdercount
+from
+	orders O
+	inner join
+	employees E
+	on O.employeeId = E.employeeID
+group by
+	O.employeeID, 
+	E.lastname
+order by 
+	O.employeeID
+
+
+
+
+
+
+
+select
+	employeeID,
+	lastname,
+	allorders,
+	coalesce(lateorders, 0),
+	case 
+		when allorders = 0 then 0.00
+		else (coalesce(lateorders, 0) * 1.00) / (allorders * 1.00)
+	end as percent
+from	
+	(select
+		O.employeeID,
+		lastName
+		count(*) as allorders
+	from
+		orders O
+		inner join
+		employees E
+		on O.employeeID = E.employeeID
+	group by
+		O.employeeID, 
+		lastname
+	order by
+		employeeID) A
+	left join
+	(select
+		employeeID,
+		count(*) as lateOrders
+	from
+		orders 
+	where
+		shippedDate >= requiredDate
+	group by
+		employeeID) B
+	on A.employeeID = B.employeeID
+
+
+
+
+
+
+
+
+
+
+
+select
+	O.employeeID,
+	lastname,
+	count(*) as allorders,
+	count(*) filter(where requiredDate <= shippedDate) as lateOrders,
+	cast(count(*) filter(where requiredDate <= shippedDate) as numeric) / count(*) as percentLateOrders
+from
+	orders O
+	inner join
+	employees E
+	on O.employeeID = E.employeeID
+group by
+	O.employeeID,
+	lastname
+order by employeeID
+
+
+
+
+
+
+select
+	A.employeeID,
+	C.lastname,
+	A.allorders,
+	coalesce(B.lateOrders, 0),
+	case 
+		when A.allorders = 0 then 0.00
+		else(cast coalesce(B.lateOrders, 0) as numeric) / A.allorders
+	end as percentLateOrders
+from
+	(select
+		employeeID,
+		count(*) as allorders
+	from 
+		orders
+	group by
+		employeeID) A
+	left join
+	(select
+		employeeID,
+		count(*) as lateORders
+	from 
+		orders
+	where
+		where requiredDate <= shippedDate
+	group by
+		employeeID) B
+	on A.employeeID = B.employeeID
+	inner join
+	employees C
+	on A.employeeID = C.employeeID
+order by 
+	employeeID
+
+
+
+
+select
+	customerID,
+	companyName,
+	totalOrderAmount,
+	case
+		when totalOrderAmount < 1000 then 'Low'
+		when totalOrderAmount between (1000, 5000) then 'Medium'
+		when totalOrderAmount between (5000, 10000) then 'High'
+		else 'Very High'
+	end as customerGroup
+from
+	select
+		C.customerID,
+		C.companyName,
+		sum(orderTotals.orderTotal) as totalOrderAmount
+	from
+		orders O
+		inner join
+		(select
+			orderID,
+			sum(unitPrice * quantity) * discount as orderTotal
+		from
+			orderdetails
+		group by
+			orderID) orderTotals
+		on O.orderID = orderTotals.orderID
+		inner join
+		customers C
+		on O.customerID = C.customerID
+		where
+			O.orderDate >= date('2016-01-01')
+		and O.orderDate < date('2017-01-01')
+	group by
+		C.customerID,
+		C.companyName
+
+
+
+
+
+
+with totalsPerOrder as (
+	select
+		orderID,
+		sum(quantity * unitPrice) * coalesce(discount, 1) orderTotal
+	from
+		orderdetails
+	group by orderID
+)
+select
+	customerID,
+	companyName,
+	customerOrderTotal,
+	case
+		when customerOrderTotal
+		...
+	end as customerTier
+from	
+	(select
+		customerID,
+		companyName,
+		sum(totalsPerOrder.orderTotal) as customerOrderTotal
+	from
+		orders
+		inner join
+		customers
+		on orders.customer.Id = customers.customerID
+		inner join
+		totalsPerOrder
+		on totalsPerOrder.orderID = orders.orderID
+		where 
+			order.orderDate >= date('2016-01-01')
+		and order.orderDate < date('2017-01-01')
+	group by
+		customerID,
+		companyName) custTotals
+
+
+
+
+
+
+with orderTotalPerCust as (
+	select
+		C.customerID,
+		companyName,
+		sum(coalesce(sum(quantity * unitPrice), 0.0)) as amount
+	from
+		customers C
+		left join
+		orders O
+			on C.customerID = O.customerID
+		inner join
+		orderDetails D
+			on O.orderID = D.orderID
+		where order.orderDate >= date('2016-01-01')
+		and order.orderDate < date('2017-01-01')
+	group by
+		C.customerID,
+		companyName
+),	
+custGroups as (select
+	orderTotalPerCust.customerID,
+	orderTotalPerCust.companyName,
+	orderTotalPerCust.amount,
+	case
+		when orderTotalPerCust.amount
+		...
+	end as customerGroup
+from
+	orderTotalPerCust)
+select
+	customerGroup,
+	count(*),
+	cast(count(*) as numeric) / (select count(customerID) from custGroups)
+from
+	custGroups
+group by 
+	customerGroup
+order by count(*) desc
+
+
+
+
+
+
+
+
+
+with orderTotalPerCust as (
+	select
+		C.customerID,
+		companyName,
+		sum(coalesce(sum(quantity * unitPrice), 0.0)) as amount
+	from
+		customers C
+		left join
+		orders O
+			on C.customerID = O.customerID
+		inner join
+		orderDetails D
+			on O.orderID = D.orderID
+		where order.orderDate >= date('2016-01-01')
+		and order.orderDate < date('2017-01-01')
+	group by
+		C.customerID,
+		companyName
+)
+select
+	customerID,
+	companyName,
+	amount,
+	custGroup
+from
+	orderTotalPerCust
+	inner join
+	thresholds
+	on
+		orderTotalPerCust.amount >= thresholds.lower
+		and orderTotalPerCust.amount < thresholds.higher
+
+
+
+
+
+select country from suppliers
+union
+select country from customers
+
+
+
+
+
+
+
+select
+	S.country
+	C.country
+from
+	(select distinct country from suppliers) S
+	full join
+	(select distinct country from customers) C
+	on S.country = C.country
+
+
+
+
+
+
+
+with
+suppliersPerCountry as (
+	select
+		country,
+		count(*) as n
+	from
+		suppliers
+	group by country
+),
+customersPerCountry as (
+	select
+		country,
+		count(*) as n
+	from
+		customers
+	group by country
+),
+allCountries as (
+	select country from suppliers
+	union
+	select country from customers
+)
+
+select
+	allCountries.country,
+	coalesce(suppliersPerCountry.n, 0),
+	coalesce(customersPerCountry.n, 0)
+from
+	allCountries
+	left join
+	suppliersPerCountry
+		on allCountries.country = suppliersPerCountry.country
+	left join
+	customersPerCountry
+		on allCountries.country = customersPerCountry.country
+order by allCountries.country asc
+
+
+
+
+
+select
+	country,
+	customerID,
+	orderID,
+	orderDate
+from	
+	(select
+		country,
+		customerID,
+		orderID,
+		orderdate,
+		rank() over(partition by country order by orderdate asc) as orderRank
+	from
+		orders) rankedOrdersPerCountry
+where orderRank = 1
+
+
+
+with laggedOrders as (
+	select
+		customerID,
+		orderID,
+		orderDate,
+		lead(orderID) over(partition by customerID order by order date asc) nextOrderID,
+		lead(orderDate) over(partition by customerID order by order date asc) nextOrderDate
+	from
+		orders
+)
+select
+	customerID,
+	orderID,
+	orderDate,
+	nextOrderID,
+	nextOrderDate,
+	cast(nextOrderDate - orderDate as int)
+from
+	laggedOrders
+where 
+	cast(nextOrderDate - orderDate as int) <= 5
+	and nextOrderID is not null
+order by customerID asc
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+customers:
+user_id, activated_at
+
+events:
+user_id, event_name, occured_at
+
+active user: has one event in last 30 days
+
+
+
+https://pgexercises.com/questions/basic/selectspecific.html
+
+--Classic retention today for a 90 day period
+
+with
+
+cohort as (
+  select distinct
+  	memid
+  from
+  	cd.members
+  where
+  	joindate >= date('2012-08-10')
+  	and joindate < date('2012-08-11')
+),
+
+all_dates as (
+  select generate_series(
+           date('2012-08-10') + interval '1' day,
+           date('2012-08-10') + interval '30' day,
+           interval '1 day'
+         )::date as date
+),
+
+active_users_counts as (
+  select
+  	starttime::date date,
+  	count(distinct(memid)) n
+  from
+  	cd.bookings
+  where
+  	starttime >= (date('2012-08-10') + interval '1' day)
+  	and starttime <= (date('2012-08-10') + interval '30' day)
+  	and memid in (select memid from cohort)
+  group by
+  	starttime::date
+)
+
+select
+	d.date,
+	row_number() over(order by d.date asc) as retention_day,
+	round(cast(coalesce(c.n, 0)as numeric) / (select count(*) from cohort) * 100, 2) as retention_percent
+from
+	all_dates d
+	left join
+	active_users_counts c
+	on d.date = c.date
+order by
+	d.date
+	
+
+
+--Month over month retention
+with first_month_users as (
+  select distinct
+  	memid
+  from
+  	cd.bookings
+  where
+  	starttime >= date('2012-07-01')
+  	and starttime < date('2012-08-01')
+),
+
+second_month_users as (
+  select distinct
+  	memid
+  from
+  	cd.bookings
+  where
+  	starttime >= date('2012-08-01')
+  	and starttime < date('2012-09-01')
+  	and memid in (select memid from first_month_users)
+)
+
+
+select
+	cast(count(*) as numeric) / (select count(*) from first_month_users)
+from
+	first_month_users f
+	inner join
+	second_month_users s
+	on f.memid = s.memid
+
+
+
+
+
+
+
+-- Range retention
+
+with
+
+-- cohort ID (index = week number) and memids in each cohort
+cohorts as (
+  select distinct
+	cast(extract(week from joindate) as integer) as cohort_start_index,
+	memid
+  from
+	cd.members
+  where
+  	memid <> 0
+),
+
+-- within each cohort, one row per memid per following week if memid booked at least once
+indexed_activity as (
+	select distinct
+		c.cohort_start_index,
+  		c.memid,
+		cast(extract(week from b.starttime) as integer) as cohort_later_index,
+		cast(extract(week from b.starttime) as integer) - c.cohort_start_index as retention_index
+	from
+		cohorts c
+		inner join
+		cd.bookings b
+		on c.memid = b.memid
+	where
+		cast(extract(week from b.starttime) as integer) - c.cohort_start_index  > 0
+),
+
+-- number of users in each cohort
+cohort_counts as (
+  select
+  	cohort_start_index,
+  	count(*) cohort_size
+  from
+  	cohorts
+  group by
+  	cohort_start_index
+),
+
+-- number of active users in each cohort in each week after user activation
+activity_counts as (
+  select
+  	cohort_start_index,
+  	retention_index,
+  	count(*) as cohort_activity_size
+  from
+  	indexed_activity
+  group by
+  	cohort_start_index,
+  	retention_index
+)
+
+-- range retention for each cohort
+select
+	c.cohort_start_index,
+	c.cohort_size,
+	a.retention_index,
+	a.cohort_activity_size,
+	round(cast(a.cohort_activity_size as numeric) / c.cohort_size * 100, 2) as retention_rate
+from
+	cohort_counts c
+	inner join
+	activity_counts a
+	on c.cohort_start_index = a.cohort_start_index
+order by
+	c.cohort_start_index,
+	a.retention_index
+
+
+
+
+
+
+
+
+
+
+15305
+4496
+

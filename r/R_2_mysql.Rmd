@@ -1,0 +1,532 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(RMySQL)
+library(dplyr)
+library(tidyr)
+```
+
+
+# Question
+
+```{r}
+con = DBI::dbConnect(RMySQL::MySQL(), 
+                     host = "localhost",
+                     port = 3306,
+                     dbname = "test",
+                     user = "root",
+                     password = "root")
+```
+
+
+Find the best test_result for each product / test.
+Ties will be marked by a NA
+
+```{r}
+product_tests_tbl = tbl(con, "product_tests")
+product_tests_tbl
+```
+
+
+
+```{r}
+df1 = product_tests_tbl %>%
+  group_by(product_id, test_id, test_result) %>%
+  summarize(n = n())
+
+df1
+```
+
+
+```{r}
+df2 = df1 %>%
+  ungroup() %>%
+  group_by(product_id, test_id) %>%
+  summarize(max_n = max(n))
+
+df2
+```
+
+
+```{r}
+df3 = df1 %>%
+  left_join(y = df2, by = c("product_id", "test_id")) %>%
+  filter(n == max_n)
+
+df3
+```
+
+
+
+```{r}
+df4 = df3 %>%
+  group_by(product_id, test_id) %>%
+  summarize(count_max = n()) %>%
+  filter(count_max == 1)  %>%
+  select(product_id, test_id)
+
+df4
+```
+
+
+```{r}
+df5 = df3 %>%
+  semi_join(df4, by = c("product_id", "test_id")) %>%
+  select(-max_n)
+
+df5
+```
+
+
+
+```{r}
+df6 = product_tests_tbl %>%
+  distinct(product_id, test_id) %>%
+  left_join(df5, by = c("product_id", "test_id")) %>%
+  collect()
+
+df6
+```
+
+
+
+
+
+
+
+
+
+
+
+
+# Employees
+
+
+
+```{r}
+con_employees = DBI::dbConnect(RMySQL::MySQL(), 
+                     host = "localhost",
+                     port = 3306,
+                     dbname = "employees",
+                     user = "root",
+                     password = "root")
+```
+
+
+
+```{r}
+employees_tbl = tbl(con_employees, "employees")
+employees_tbl
+```
+
+
+
+```{r}
+salaries_tbl = tbl(con_employees, "salaries")
+
+salaries_df = salaries_tbl %>%
+  as.data.frame() %>%
+  separate(col = to_date, into = c("to_year", "to_month", "to_day"), sep = "-")
+salaries_df
+```
+
+
+
+```{r}
+dept_emp_tbl = tbl(con_employees, "dept_emp")
+
+dept_emp_df = dept_emp_tbl %>%
+  as.data.frame() %>%
+  separate(col = to_date, into = c("to_year", "to_month", "to_day"), sep = "-")
+dept_emp_df
+```
+
+
+
+```{r}
+dept_emp_df %>%
+  filter(to_year == "9999")
+```
+
+
+```{r}
+result_df = salaries_df %>%
+  filter(to_year == "9999") %>%
+  left_join(y = dept_emp_df %>% filter(to_year == "9999"), by = "emp_no") %>%
+  select(emp_no, salary, dept_no) %>%
+  group_by(dept_no) %>%
+  summarize(count = n(), 
+            min = min(salary),
+            avg = mean(salary),
+            max = max(salary),
+            stddev = var(salary)^(1/2),
+            "25thpercentile" = quantile(salary, probs = 0.25),
+            "50thpercentile" = quantile(salary, probs = 0.5),
+            "75thpercentile" = quantile(salary, probs = 0.75)
+            ) %>%
+  collect()
+
+result_df
+```
+
+
+
+```{r}
+set.seed(1234)
+
+salaries_df %>%
+  filter(to_year == "9999") %>%
+  sample_n(200) %>%
+  left_join(y = dept_emp_df %>% filter(to_year == "9999"), by = "emp_no") %>%
+  select(dept_no, emp_no, salary) %>%
+  group_by(dept_no) %>%
+  arrange(dept_no, salary) %>%
+  mutate(rownum = row_number(), dense_rank = dense_rank(salary), percent_rank = percent_rank(salary), min_rank = min_rank(salary),
+         cume_dist = cume_dist(salary))
+```
+
+
+
+```{r}
+dept_emp_df %>%
+  distinct(emp_no) %>%
+  arrange(emp_no) %>%
+  mutate(previous_emp_no = lag(emp_no))
+```
+
+
+
+
+
+
+
+
+
+```{r}
+employees_df = employees_tbl %>%
+  as.data.frame()
+employees_df
+```
+
+
+```{r}
+current_salaries_df = salaries_df %>%
+  filter(to_year == "9999") %>%
+  select(emp_no, salary)
+current_salaries_df
+```
+
+
+```{r}
+current_dept_emp_df = dept_emp_tbl %>%
+  as.data.frame() %>%
+  separate(col = to_date, into = c("to_year", "to_month", "to_day")) %>%
+  filter(to_year == "9999") %>%
+  select(emp_no, dept_no)
+current_dept_emp_df
+```
+
+
+
+```{r}
+titles_tbl = tbl(con_employees, "titles")
+titles_tbl
+```
+
+
+```{r}
+current_titles_df = titles_tbl %>%
+  as.data.frame() %>%
+  separate(col = to_date, into = c("to_year", "to_month", "to_day")) %>%
+  filter(to_year == "9999") %>%
+  select(emp_no, title)
+
+current_titles_df
+```
+
+
+employees_df
+current_salaries_df
+current_dept_emp_df
+current_titles_df
+dept_manager_df
+
+```{r}
+current_titles_df %>%
+  distinct(title) %>%
+  count() %>%
+  .$n
+```
+
+```{r}
+current_salaries_df %>%
+summarize(sum = sum(as.numeric(salary))) %>%
+.$sum
+
+```
+
+
+```{r}
+current_salaries_df %>%
+summarize(min = min(salary)) %>%
+.$min
+```
+
+
+```{r}
+current_titles_df %>%
+filter(title == "Senior Engineer") %>%
+left_join(y = current_salaries_df, by = "emp_no") %>%
+summarize(max = max(salary)) %>%
+.$max
+
+```
+
+```{r}
+current_dept_emp_df %>%
+filter(dept_no == "d001") %>%
+left_join(current_salaries_df, by = "emp_no") %>%
+summarize(count = n(), avg_salary = mean(salary))
+
+```
+
+
+
+
+```{r}
+current_salaries_df %>%
+summarize(min = min(salary), avg = mean(salary), max = max(salary), sum = sum(as.numeric(salary)))
+```
+
+```{r}
+current_titles_df %>%
+ group_by(title) %>%
+ summarize(count = n())
+
+```
+
+
+
+
+
+```{r}
+current_salaries_df %>%
+left_join(y = current_titles_df, by = "emp_no") %>%
+group_by(title) %>%
+summarize(min = min(salary), max = max(salary)) %>%
+mutate(diff = max - min)
+
+```
+
+
+
+```{r}
+dept_managers_tbl = tbl(con_employees, "dept_manager")
+dept_manager_df = dept_managers_tbl %>%
+  as.data.frame() %>%
+  separate(col = to_date, into = c("to_year", "to_month", "to_day")) %>%
+  filter(to_year == "9999") %>%
+  select(emp_no, dept_no) %>%
+  rename(manager_id = emp_no)
+
+dept_manager_df
+```
+
+
+
+
+```{r}
+current_salaries_df %>%
+	left_join(y = current_dept_emp_df, by = "emp_no") %>%
+	left_join(y = dept_manager_df, by = "dept_no") %>%
+	filter(emp_no != manager_id) %>%
+	group_by(manager_id) %>%
+	summarize(min = min(salary))
+
+```
+
+
+```{r}
+current_salaries_df %>%
+	left_join(y = current_dept_emp_df, by = "emp_no") %>%
+	group_by(dept_no) %>%
+	summarize(total = sum(as.numeric(salary)))
+```
+
+
+
+
+```{r}
+current_salaries_df %>%
+	left_join(y = current_titles_df, by = "emp_no") %>%
+	filter(title != "Senior Engineer") %>%
+	group_by(title) %>%
+	summarize(avg = mean(salary))
+
+```
+
+
+
+```{r}
+current_dept_emp_df %>%
+	filter(dept_no == "d001") %>%
+	left_join(y = current_salaries_df, by = "emp_no") %>%
+	left_join(y = current_titles_df, by = "emp_no") %>%
+	group_by(title) %>%
+	summarize(total = sum(as.numeric(salary)), max = max(salary), min = min(salary), avg = mean(salary))
+
+```
+
+
+
+
+
+
+```{r}
+current_salaries_df %>%
+	filter(salary >= 40000) %>%
+	left_join(y = current_titles_df, by = "emp_no") %>%
+	group_by(title) %>%
+	summarize(max = max(salary))
+
+```
+
+
+
+
+```{r}
+current_dept_emp_df %>%
+	group_by(dept_no) %>%
+	summarize(n_employees = n()) %>%
+	filter(n_employees >= 20000) %>%
+	select(dept_no) %>%
+	left_join(y = current_dept_emp_df, by = "dept_no") %>%
+	select(dept_no, emp_no) %>%
+	ungroup() %>%
+	left_join(y = current_salaries_df, by = "emp_no") %>%
+	group_by(dept_no) %>%
+	summarize(avg = mean(salary))
+
+
+```
+
+
+
+
+
+
+```{r}
+salaries_df = salaries_tbl %>%
+  as.data.frame() %>%
+  mutate(from_date = as.Date(from_date)) %>%
+  mutate(to_date = as.Date(to_date)) 
+
+salaries_df
+```
+
+
+
+```{r}
+df1 = salaries_df %>%
+	group_by(emp_no) %>%
+	summarize(n_salaries = n()) %>%
+	filter(n_salaries > 1) %>%
+  select(emp_no) 
+
+df1
+```
+
+
+
+```{r}
+df2 = df1 %>%
+  left_join(y = salaries_df, by = "emp_no") %>%
+  group_by(emp_no) %>%
+  arrange(emp_no, from_date, salary) %>%
+  mutate(previous_salary = lag(salary)) %>%
+  mutate(salary_change = salary / previous_salary) %>%
+  filter(!is.na(previous_salary)) %>%
+  filter(!is.na(salary_change)) %>%
+  filter(salary_change > 1.1) %>%
+  ungroup() %>%
+  distinct(emp_no) %>%
+  summarize(n_emp_with_high_raise = n())
+
+df2
+```
+
+```{r}
+df1 %>%
+  left_join(y = salaries_df, by = "emp_no") %>%
+  group_by(emp_no) %>%
+  arrange(emp_no, from_date, salary) %>%
+  mutate(previous_salary = lag(salary)) %>%
+  mutate(salary_change = salary / previous_salary) %>%
+  filter(!is.na(previous_salary)) %>%
+  filter(!is.na(salary_change)) %>%
+  filter(salary_change > 1) %>%
+  ungroup() %>%
+  distinct(emp_no) %>%
+  summarize(n_emp_with_high_raise = n())
+```
+
+
+```{r}
+salaries_df %>% distinct(emp_no) %>% count()
+```
+
+
+
+```{r}
+for (i in c(1:10)){
+  cat(i)
+}
+```
+
+
+```{r}
+(0.5/0.04)^2 * (qnorm(0.975) - qnorm(0.025))^2
+```
+
+
+
+```{r}
+0.6 * 0.4 * qnorm(0.02)^2 / (0.05)^2
+```
+
+
+
+```{r}
+52/69 - 120/131
+```
+
+
+
+```{r}
+n1 = 69
+m1 = 52/69
+s1 = sqrt(m1*(1-m1))
+m1
+s1
+
+
+n2 = 131
+m2 = 120/131
+s2 = sqrt(m2*(1-m2))
+m2
+s2
+
+
+pnorm(q = 52/69 - 120/131, mean = 0, sd = sqrt(s1^2 / n1 + s2^2 / n2))
+```
+
+
+
+```{r}
+?rnorm
+```
+

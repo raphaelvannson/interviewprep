@@ -1,0 +1,143 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+#install.packages("ISLR")
+install.packages("XQuartz")
+```
+
+
+```{r}
+library(MASS)
+library(ISLR)
+library(dplyr)
+```
+
+
+
+```{r}
+#fix(Boston)
+Boston
+```
+
+
+
+```{r}
+lm.fit = lm(data = Boston, formula = medv~lstat)
+lm.fit
+```
+
+
+```{r}
+confint(lm.fit)
+```
+
+```{r}
+predict(object = lm.fit, newdata = data.frame(lstat = c(5, 10, 15)), interval = "confidence")
+```
+
+```{r}
+predict(object = lm.fit, newdata = data.frame(lstat = c(5, 10, 15)), interval = "prediction")
+```
+
+```{r}
+plot(Boston$lstat, Boston$medv)
+abline(lm.fit)
+```
+
+
+
+
+```{r}
+par(mfrow = c(2, 2))
+plot(lm.fit)
+```
+
+
+```{r}
+plot(predict(lm.fit), residuals(lm.fit))
+```
+
+
+```{r}
+plot(predict(lm.fit), rstudent(lm.fit))
+```
+
+
+
+```{r}
+plot(hatvalues(lm.fit))
+```
+
+
+
+
+```{r}
+summary(lm.fit)
+```
+
+
+```{r}
+lm.fit = lm(data = Boston, formula = medv ~ .)
+summary(lm.fit)
+```
+
+
+
+```{r}
+install.packages("car")
+```
+
+
+```{r}
+library(car)
+```
+
+
+```{r}
+vif(lm.fit)
+```
+
+
+
+```{r}
+lm.fit1 = lm(data = Boston, formula = medv ~ .-age)
+summary(lm.fit1)
+```
+
+
+
+```{r}
+summary(lm(data = Boston, formula = medv ~ lstat + age + lstat:age))
+```
+
+```{r}
+lm.fit2 = lm(data = Boston, formula = medv ~ lstat + I(lstat^2) )
+summary(lm.fit2)
+```
+
+```{r}
+lm.fit = lm(data = Boston, formula = medv ~ lstat)
+summary(lm.fit)
+```
+
+
+
+```{r}
+anova(lm.fit, lm.fit2)
+```
+
+
+```{r}
+par(mfrow = c(2,2))
+plot(lm.fit2)
+```
+
+
+
+
+
+
